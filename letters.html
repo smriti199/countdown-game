@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Countdown Game - Letter Round</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        #letters, #userWord, #result, #timer, #score, #round, #possibleWords {
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        #timer {
+            font-weight: bold;
+            color: #d00;
+        }
+        #score, #round {
+            font-weight: bold;
+            color: #080;
+        }
+        #possibleWords {
+            max-width: 80%;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Countdown Game - Letter Round</h1>
+    <div id="round">Round: 1 / 3</div>
+    <div id="timer">30</div>
+    <div id="score">Score: 0</div>
+    <div id="letters"></div>
+    <button onclick="startGame()" id="startButton">Start Game</button>
+    <input type="text" id="userWord" placeholder="Enter your word" disabled>
+    <button onclick="submitWord()" id="submitButton" disabled>Submit Word</button>
+    <div id="result"></div>
+    <div id="possibleWords"></div>
+
+    <script>
+        const vowels = 'AEIOU';
+        const consonants = 'BCDFGHJKLMNPQRSTVWXYZ';
+        let currentLetters = '';
+        let timerInterval;
+        let timeLeft = 30;
+        let score = 0;
+        let currentRound = 0;
+        const totalRounds = 3;
+
+        async function validateWord(word) {
+            try {
+                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+                return response.ok;
+            } catch (error) {
+                console.error('Error validating word:', error);
+                return false;
+            }
+        }
+
+        function startGame() {
+            if (currentRound < totalRounds) {
+                currentRound++;
+                updateRoundDisplay();
+                generateLetters();
+                startTimer();
+                document.getElementById('userWord').disabled = false;
+                document.getElementById('submitButton').disabled = false;
+                document.getElementById('userWord').value = '';
+                document.getElementById('result').textContent = '';
+                document.getElementById('possibleWords').textContent = '';
+                document.getElementById('startButton').textContent = 'Next Round';
+            } else {
+                endGame(true);
+            }
+        }
+
+        function generateLetters() {
+            currentLetters = '';
+            for (let i = 0; i < 9; i++) {
+                if (i < 3 || Math.random() < 0.6) {
+                    currentLetters += consonants[Math.floor(Math.random() * consonants.length)];
+                } else {
+                    currentLetters += vowels[Math.floor(Math.random() * vowels.length)];
+                }
+            }
+            document.getElementById('letters').textContent = currentLetters;
+        }
+
+        function startTimer() {
+            timeLeft = 30;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) {
+                    endRound();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            document.getElementById('timer').textContent = timeLeft;
+        }
+
+        function endRound() {
+            clearInterval(timerInterval);
+            document.getElementById('userWord').disabled = true;
+            document.getElementById('submitButton').disabled = true;
+            if (timeLeft <= 0) {
+                document.getElementById('result').textContent = 'Time\'s up!';
+            }
+            document.getElementById('startButton').disabled = false;
+            if (currentRound === totalRounds) {
+                document.getElementById('startButton').textContent = 'See Final Score';
+            }
+            findPossibleWords();
+        }
+
+        async function submitWord() {
+            const userWord = document.getElementById('userWord').value.toUpperCase();
+            let isValid = await checkWordValidity(userWord);
+
+            if (isValid) {
+                const wordScore = calculateScore(userWord);
+                score += wordScore;
+                document.getElementById('result').textContent = `Valid word: ${userWord}. You scored ${wordScore} points!`;
+                updateScoreDisplay();
+            } else {
+                document.getElementById('result').textContent = 'Invalid word. No points awarded.';
+            }
+
+            endRound();
+        }
+
+        async function checkWordValidity(word) {
+            if (word.length < 3) return false;
+            if (!canFormWord(word)) return false;
+            return await validateWord(word);
+        }
+
+        function canFormWord(word) {
+            let tempLetters = currentLetters;
+            for (let char of word) {
+                if (tempLetters.includes(char)) {
+                    tempLetters = tempLetters.replace(char, '');
+                } else {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function calculateScore(word) {
+            const length = word.length;
+            if (length <= 4) return length;
+            if (length === 5) return 5;
+            if (length === 6) return 6;
+            if (length === 7) return 7;
+            if (length === 8) return 10;
+            return 11; // 9 letters
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+        }
+
+        function updateRoundDisplay() {
+            document.getElementById('round').textContent = `Round: ${currentRound} / ${totalRounds}`;
+        }
+
+        function endGame(completed = false) {
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('userWord').disabled = true;
+            document.getElementById('submitButton').disabled = true;
+            if (completed) {
+                document.getElementById('result').textContent = `Game Over! Final Score: ${score}`;
+            }
+        }
+
+        async function findPossibleWords() {
+            const possibleWords = [];
+            for (let len = 9; len >= 3; len--) {
+                const combinations = getCombinations(currentLetters, len);
+                for (const word of combinations) {
+                    if (await validateWord(word)) {
+                        possibleWords.push(word);
+                        if (possibleWords.length >= 10) break;
+                    }
+                }
+                if (possibleWords.length >= 10) break;
+            }
+            displayPossibleWords(possibleWords);
+        }
+
+        function getCombinations(letters, length) {
+            const combinations = [];
+            function backtrack(start, current) {
+                if (current.length === length) {
+                    combinations.push(current.join(''));
+                    return;
+                }
+                for (let i = start; i < letters.length; i++) {
+                    current.push(letters[i]);
+                    backtrack(i + 1, current);
+                    current.pop();
+                }
+            }
+            backtrack(0, []);
+            return combinations;
+        }
+
+        function displayPossibleWords(words) {
+            const possibleWordsElement = document.getElementById('possibleWords');
+            if (words.length > 0) {
+                possibleWordsElement.innerHTML = '<h3>Some possible words:</h3>' + words.join(', ');
+            } else {
+                possibleWordsElement.textContent = 'No valid words found.';
+            }
+        }
+    </script>
+</body>
+</html>
