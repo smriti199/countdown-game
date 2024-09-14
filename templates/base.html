@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Countdown Game - {% block title %}{% endblock %}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        nav {
+            margin-bottom: 20px;
+        }
+        nav a {
+            margin: 0 10px;
+        }
+        #game-container { display: none; }
+        #numbers, #letters { font-size: 24px; margin: 20px 0; }
+        #target { font-size: 36px; font-weight: bold; margin: 20px 0; }
+        #timer { font-size: 24px; margin: 20px 0; }
+        input, button { font-size: 18px; padding: 5px 10px; }
+        #message, #optimal-solution { margin-top: 20px; font-weight: bold; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <h1>Countdown Game</h1>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/numbers">Numbers Game</a>
+        <a href="/letters">Letters Game</a>
+    </nav>
+    {% block content %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>
