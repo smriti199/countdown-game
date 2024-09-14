@@ -17,7 +17,7 @@
             padding: 10px 20px;
             font-size: 16px;
         }
-        #letters, #userWord, #result, #timer, #score, #round, #possibleWords {
+        #letters, #userWord, #result, #timer, #score, #round, #possibleWords, #highScores, #letterSelection {
             font-size: 24px;
             margin: 20px 0;
         }
@@ -29,9 +29,18 @@
             font-weight: bold;
             color: #080;
         }
-        #possibleWords {
+        #possibleWords, #highScores {
             max-width: 80%;
             text-align: center;
+        }
+        #highScores {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        #letterSelection button {
+            font-size: 18px;
+            margin: 5px;
         }
     </style>
 </head>
@@ -40,12 +49,17 @@
     <div id="round">Round: 1 / 3</div>
     <div id="timer">30</div>
     <div id="score">Score: 0</div>
+    <div id="letterSelection">
+        <button onclick="selectLetter('vowel')">Vowel</button>
+        <button onclick="selectLetter('consonant')">Consonant</button>
+    </div>
     <div id="letters"></div>
-    <button onclick="startGame()" id="startButton">Start Game</button>
+    <button onclick="startRound()" id="startButton" disabled>Start Round</button>
     <input type="text" id="userWord" placeholder="Enter your word" disabled>
     <button onclick="submitWord()" id="submitButton" disabled>Submit Word</button>
     <div id="result"></div>
     <div id="possibleWords"></div>
+    <div id="highScores"></div>
 
     <script>
         const vowels = 'AEIOU';
@@ -56,44 +70,61 @@
         let score = 0;
         let currentRound = 0;
         const totalRounds = 3;
+        let validWords = new Set();
+        const wordCache = new Map();
+        let letterCount = 0;
 
-        async function validateWord(word) {
-            try {
-                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
-                return response.ok;
-            } catch (error) {
-                console.error('Error validating word:', error);
-                return false;
+        function selectLetter(type) {
+            if (letterCount < 9) {
+                let letter;
+                if (type === 'vowel') {
+                    letter = vowels[Math.floor(Math.random() * vowels.length)];
+                } else {
+                    letter = consonants[Math.floor(Math.random() * consonants.length)];
+                }
+                currentLetters += letter;
+                letterCount++;
+                updateLettersDisplay();
+                
+                if (letterCount === 9) {
+                    document.getElementById('startButton').disabled = false;
+                    document.querySelectorAll('#letterSelection button').forEach(btn => btn.disabled = true);
+                }
             }
+        }
+
+        function updateLettersDisplay() {
+            document.getElementById('letters').textContent = currentLetters;
+        }
+
+        function startRound() {
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('userWord').disabled = false;
+            document.getElementById('submitButton').disabled = false;
+            document.getElementById('result').textContent = '';
+            document.getElementById('possibleWords').textContent = '';
+            startTimer();
         }
 
         function startGame() {
             if (currentRound < totalRounds) {
                 currentRound++;
                 updateRoundDisplay();
-                generateLetters();
-                startTimer();
-                document.getElementById('userWord').disabled = false;
-                document.getElementById('submitButton').disabled = false;
+                resetLetterSelection();
                 document.getElementById('userWord').value = '';
-                document.getElementById('result').textContent = '';
-                document.getElementById('possibleWords').textContent = '';
-                document.getElementById('startButton').textContent = 'Next Round';
+                document.getElementById('startButton').textContent = 'Start Round';
+                validWords.clear();
             } else {
                 endGame(true);
             }
         }
 
-        function generateLetters() {
+        function resetLetterSelection() {
             currentLetters = '';
-            for (let i = 0; i < 9; i++) {
-                if (i < 3 || Math.random() < 0.6) {
-                    currentLetters += consonants[Math.floor(Math.random() * consonants.length)];
-                } else {
-                    currentLetters += vowels[Math.floor(Math.random() * vowels.length)];
-                }
-            }
-            document.getElementById('letters').textContent = currentLetters;
+            letterCount = 0;
+            updateLettersDisplay();
+            document.querySelectorAll('#letterSelection button').forEach(btn => btn.disabled = false);
+            document.getElementById('startButton').disabled = true;
         }
 
         function startTimer() {
@@ -120,10 +151,11 @@
                 document.getElementById('result').textContent = 'Time\'s up!';
             }
             document.getElementById('startButton').disabled = false;
+            document.getElementById('startButton').textContent = 'Next Round';
             if (currentRound === totalRounds) {
                 document.getElementById('startButton').textContent = 'See Final Score';
             }
-            findPossibleWords();
+            displayPossibleWords();
         }
 
         async function submitWord() {
@@ -135,6 +167,7 @@
                 score += wordScore;
                 document.getElementById('result').textContent = `Valid word: ${userWord}. You scored ${wordScore} points!`;
                 updateScoreDisplay();
+                validWords.add(userWord);
             } else {
                 document.getElementById('result').textContent = 'Invalid word. No points awarded.';
             }
@@ -160,6 +193,21 @@
             return true;
         }
 
+        async function validateWord(word) {
+            if (wordCache.has(word)) {
+                return wordCache.get(word);
+            }
+            try {
+                const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+                const isValid = response.ok;
+                wordCache.set(word, isValid);
+                return isValid;
+            } catch (error) {
+                console.error('Error validating word:', error);
+                return false;
+            }
+        }
+
         function calculateScore(word) {
             const length = word.length;
             if (length <= 4) return length;
@@ -182,24 +230,25 @@
             document.getElementById('startButton').disabled = true;
             document.getElementById('userWord').disabled = true;
             document.getElementById('submitButton').disabled = true;
+            document.querySelectorAll('#letterSelection button').forEach(btn => btn.disabled = true);
             if (completed) {
                 document.getElementById('result').textContent = `Game Over! Final Score: ${score}`;
+                updateHighScores(score);
             }
         }
 
         async function findPossibleWords() {
-            const possibleWords = [];
+            const words = [];
             for (let len = 9; len >= 3; len--) {
                 const combinations = getCombinations(currentLetters, len);
                 for (const word of combinations) {
                     if (await validateWord(word)) {
-                        possibleWords.push(word);
-                        if (possibleWords.length >= 10) break;
+                        words.push(word);
+                        if (words.length >= 10) return words;
                     }
                 }
-                if (possibleWords.length >= 10) break;
             }
-            displayPossibleWords(possibleWords);
+            return words;
         }
 
         function getCombinations(letters, length) {
@@ -219,14 +268,45 @@
             return combinations;
         }
 
-        function displayPossibleWords(words) {
+        async function displayPossibleWords() {
             const possibleWordsElement = document.getElementById('possibleWords');
-            if (words.length > 0) {
-                possibleWordsElement.innerHTML = '<h3>Some possible words:</h3>' + words.join(', ');
+            possibleWordsElement.innerHTML = '<h3>Finding possible words...</h3>';
+            const words = await findPossibleWords();
+            const newWords = words.filter(word => !validWords.has(word));
+            if (newWords.length > 0) {
+                possibleWordsElement.innerHTML = '<h3>Some possible words you missed:</h3>' + newWords.join(', ');
             } else {
-                possibleWordsElement.textContent = 'No valid words found.';
+                possibleWordsElement.textContent = 'Great job! You found all the words we could find.';
             }
         }
+
+        function updateHighScores(newScore) {
+            let highScores = JSON.parse(localStorage.getItem('countdownHighScores')) || [];
+            highScores.push(newScore);
+            highScores.sort((a, b) => b - a);
+            highScores = highScores.slice(0, 5); // Keep only top 5 scores
+            localStorage.setItem('countdownHighScores', JSON.stringify(highScores));
+            displayHighScores();
+        }
+
+        function displayHighScores() {
+            const highScores = JSON.parse(localStorage.getItem('countdownHighScores')) || [];
+            const highScoresElement = document.getElementById('highScores');
+            if (highScores.length > 0) {
+                let html = '<h3>High Scores:</h3><ol>';
+                highScores.forEach(score => {
+                    html += `<li>${score}</li>`;
+                });
+                html += '</ol>';
+                highScoresElement.innerHTML = html;
+            } else {
+                highScoresElement.textContent = 'No high scores yet. Be the first!';
+            }
+        }
+
+        // Initialize game
+        startGame();
+        displayHighScores();
     </script>
 </body>
 </html>
